@@ -55,7 +55,7 @@ Views.settings = {
           <div class="card">
             <h5 class="card-header">Account</h5>
             <div class="card-body">
-              <p class="small text-muted">To change the shared password, open the Google Sheet → <b>Ace Café</b> menu → <b>Set app password</b>.</p>
+              ${this.passwordFields()}
               <button class="btn btn-outline-danger w-100" id="logout-btn" type="button"><i class="bx bx-log-out me-1"></i>Log out</button>
               <p class="small text-muted text-center mt-3 mb-0">Version ${U.esc(APP_CONFIG.version)}</p>
             </div>
@@ -80,6 +80,7 @@ Views.settings = {
         UI.toast(err.message, 'danger');
       }
     });
+    el.querySelector('#password-form')?.addEventListener('submit', e => this.changePassword(e));
     el.querySelector('#logout-btn').addEventListener('click', () => this.logout());
     el.querySelector('#install-btn')?.addEventListener('click', async () => {
       if (await App.install.prompt()) return;
@@ -233,6 +234,44 @@ Views.settings = {
       UI.toast(err.message, 'danger');
     }
     UI.route();
+  },
+
+  passwordFields() {
+    if (localStorage.getItem('ace_local') === '1' || !Api.url()) {
+      return '<p class="small text-muted">Connect the Google Sheet and log in to change the shared password.</p>';
+    }
+    return `
+      <form id="password-form" class="mb-4" autocomplete="off">
+        <label class="form-label" for="pw-current">Current password</label>
+        <input class="form-control mb-2" type="password" id="pw-current" autocomplete="current-password" required>
+        <label class="form-label" for="pw-next">New password</label>
+        <input class="form-control mb-2" type="password" id="pw-next" autocomplete="new-password" minlength="6" required>
+        <label class="form-label" for="pw-confirm">Confirm new password</label>
+        <input class="form-control mb-2" type="password" id="pw-confirm" autocomplete="new-password" minlength="6" required>
+        <p class="form-text">At least 6 characters. Other devices will need to log in again.</p>
+        <button class="btn btn-outline-primary" type="submit">Change password</button>
+      </form>`;
+  },
+
+  async changePassword(e) {
+    e.preventDefault();
+    const form = e.target;
+    const current = form.querySelector('#pw-current').value;
+    const next = form.querySelector('#pw-next').value;
+    const confirm = form.querySelector('#pw-confirm').value;
+    if (next.length < 6) { UI.toast('Password must be at least 6 characters', 'danger'); return; }
+    if (next !== confirm) { UI.toast('The new passwords do not match', 'danger'); return; }
+    const btn = form.querySelector('button');
+    btn.disabled = true;
+    try {
+      await Auth.changePassword(current, next);
+      form.reset();
+      UI.toast('Password changed. Other devices must log in again.');
+    } catch (err) {
+      UI.toast(err.message, 'danger');
+    } finally {
+      btn.disabled = false;
+    }
   },
 
   async logout() {

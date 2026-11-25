@@ -94,6 +94,13 @@ const Auth = (() => {
       return res.sync || null;
     },
 
+    /** Keeps this device logged in. Every other device must sign in again. */
+    async changePassword(current, next) {
+      const res = await Api.call('setPassword', { current, next });
+      localStorage.setItem(TOKEN_KEY, res.token);
+      localStorage.setItem(EXP_KEY, String(res.expiresAt));
+    },
+
     /** Clears the session and this device's cached data (it's a shared login). */
     async logout() {
       Sync.stop();

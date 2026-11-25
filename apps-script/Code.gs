@@ -314,6 +314,7 @@ function doPost(e) {
     const user = String(req.device || 'app').slice(0, 40);
     switch (req.action) {
       case 'ping':       return json_({ ok: true, serverTime: nowIso_() });
+      case 'setPassword': return json_(setPassword_(req.current, req.next));
       case 'sync':       return json_(sync_(req.since));
       case 'batch': {
         const ctx = {};
@@ -384,6 +385,35 @@ function getTokenSecret_() {
     props_().TOKEN_SECRET = secret;
   }
   return secret;
+}
+
+function setPassword_(current, next) {
+  const cache = CacheService.getScriptCache();
+  const fails = Number(cache.get('login_fails') || 0);
+  if (fails >= MAX_LOGIN_FAILS) throw error_('LOCKED', 'Too many wrong attempts. Try again in 15 minutes.');
+  const salt = props_().PASSWORD_SALT;
+  const hash = props_().PASSWORD_HASH;
+  if (!salt || !hash) throw error_('NOT_SET_UP', 'App password not set. Open the Sheet → Ace Café menu → Set app password.');
+  if (sha256Hex_(salt + String(current || '')) !== hash) {
+    cache.put('login_fails', String(fails + 1), 15 * 60);
+    throw error_('WRONG_PASSWORD', 'Current password is wrong');
+  }
+  next = String(next || '');
+  if (next.length < 6) throw invalid_('Password must be at least 6 characters.');
+  cache.remove('login_fails');
+  const newSalt = Utilities.getUuid();
+  const secret = Utilities.getUuid() + Utilities.getUuid();
+  PropertiesService.getScriptProperties().setProperties({
+    PASSWORD_SALT: newSalt,
+    PASSWORD_HASH: sha256Hex_(newSalt + next),
+    TOKEN_SECRET: secret
+  });
+  props_().PASSWORD_SALT = newSalt;
+  props_().PASSWORD_HASH = sha256Hex_(newSalt + next);
+  props_().TOKEN_SECRET = secret;
+  const exp = Date.now() + TOKEN_DAYS * 24 * 3600 * 1000;
+  const payload = Utilities.base64EncodeWebSafe(JSON.stringify({ exp: exp }));
+  return { ok: true, token: payload + '.' + sign_(payload), expiresAt: exp };
 }
 
 function sha256Hex_(text) {
